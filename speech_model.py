@@ -2,11 +2,14 @@ import time
 
 class SpeechModel:
     def __init__(self):
-        # We will use a simple heuristic model for demonstration
-        # It interprets consecutive frames of lip features into words
         self.history = []
         self.last_predicted_word = ""
         self.last_prediction_time = 0
+        
+        # State tracking for syllable counting
+        self.is_open = False
+        self.syllable_count = 0
+        self.last_syllable_time = time.time()
         
     def predict(self, lip_data):
         """
@@ -23,39 +26,48 @@ class SpeechModel:
         
         # Determine current gesture
         gesture = "Neutral"
-        if mar > 0.20:
-            gesture = "Mouth Open (Vowel/Ah)"
+        if mar > 0.15:
+            gesture = "Mouth Open"
         elif mar > 0.10:
             gesture = "Speaking..."
-        elif width > 120: # Arbitrary threshold, depends on camera distance
+        elif width > 120:
             gesture = "Smile / Wide"
         else:
             gesture = "Mouth Closed"
             
-        self.history.append({"mar": mar, "time": current_time, "gesture": gesture})
-        
-        # Keep only last 2 seconds of history
-        self.history = [h for h in self.history if current_time - h["time"] < 2.0]
-        
-        # Simple heuristic pattern matching
-        # If we see "Mouth Open" recently followed by "Mouth Closed", we can trigger a word
-        # In a real model, this would be an LSTM or Transformer predicting characters/phonemes
-        
+        # Detect state transitions (Syllable tracking)
+        if mar > 0.15 and not self.is_open:
+            self.is_open = True
+            
+        elif mar <= 0.10 and self.is_open:
+            # Transitioned from Open -> Closed (One syllable)
+            self.is_open = False
+            self.syllable_count += 1
+            self.last_syllable_time = current_time
+            
         predicted_text = ""
         
-        open_count = sum(1 for h in self.history if h["gesture"] == "Mouth Open (Vowel/Ah)")
-        
-        if current_time - self.last_prediction_time > 3.0:
-            if open_count > 10:
-                predicted_text = "Hello"
-                self.last_predicted_word = predicted_text
-                self.last_prediction_time = current_time
-            elif open_count > 5:
+        # If user stops speaking for 1.5 seconds, evaluate the syllables
+        if self.syllable_count > 0 and (current_time - self.last_syllable_time > 1.5):
+            if self.syllable_count == 1:
                 predicted_text = "Yes"
-                self.last_predicted_word = predicted_text
-                self.last_prediction_time = current_time
+            elif self.syllable_count == 2:
+                predicted_text = "Hello"
+            elif self.syllable_count == 3:
+                predicted_text = "How are you?"
+            elif self.syllable_count >= 4:
+                predicted_text = "I am fine"
                 
+            self.last_predicted_word = predicted_text
+            self.last_prediction_time = current_time
+            self.syllable_count = 0 # Reset
+            
         # To make the UI dynamic, we clear the predicted word after some time
         display_text = self.last_predicted_word if current_time - self.last_prediction_time < 3.0 else ""
         
+        # If currently speaking, show a typing indicator like effect
+        if self.syllable_count > 0 and display_text == "":
+            display_text = "..."
+        
         return gesture, display_text
+
