@@ -1,10 +1,13 @@
 import cv2
 import mediapipe as mp
+from mediapipe.python.solutions import face_mesh as mp_face_mesh_module
+from mediapipe.python.solutions import hands as mp_hands_module
+from mediapipe.python.solutions import drawing_utils as mp_drawing_module
 import numpy as np
 
 class LipTracker:
     def __init__(self):
-        self.mp_face_mesh = mp.solutions.face_mesh
+        self.mp_face_mesh = mp_face_mesh_module
         self.face_mesh = self.mp_face_mesh.FaceMesh(
             static_image_mode=False,
             max_num_faces=1,
@@ -12,7 +15,7 @@ class LipTracker:
         )
         
         # Robust Hand Tracking instead of Task API
-        self.mp_hands = mp.solutions.hands
+        self.mp_hands = mp_hands_module
         self.hands = self.mp_hands.Hands(
             static_image_mode=False,
             max_num_hands=1,
@@ -20,7 +23,7 @@ class LipTracker:
             min_tracking_confidence=0.5
         )
         
-        self.mp_drawing = mp.solutions.drawing_utils
+        self.mp_drawing = mp_drawing_module
         self.last_mar = 0.0
 
     def process_frame(self, frame):
