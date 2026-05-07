@@ -84,7 +84,8 @@ export default function AppPage() {
 
   useEffect(() => {
     const connectWs = () => {
-      wsRef.current = new WebSocket('ws://localhost:8000/ws/stream');
+      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/stream';
+      wsRef.current = new WebSocket(wsUrl);
       
       wsRef.current.onopen = () => {
         console.log('WebSocket Connected');
