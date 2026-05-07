@@ -84,7 +84,7 @@ export default function AppPage() {
 
   useEffect(() => {
     const connectWs = () => {
-      let wsUrl = VITE_WS_URL || 'ws://localhost:8000/ws/stream';
+      let wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/stream';
 
       // Auto-upgrade to wss if frontend is on https and wsUrl is insecure
       if (window.location.protocol === 'https:' && wsUrl.startsWith('ws://')) {
