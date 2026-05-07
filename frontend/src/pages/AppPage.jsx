@@ -84,7 +84,21 @@ export default function AppPage() {
 
   useEffect(() => {
     const connectWs = () => {
-      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/stream';
+      let wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/stream';
+      
+      // Auto-upgrade to wss if frontend is on https and wsUrl is insecure
+      if (window.location.protocol === 'https:' && wsUrl.startsWith('ws://')) {
+        // Only upgrade if it's not localhost (to allow local dev on https)
+        if (!wsUrl.includes('localhost') && !wsUrl.includes('127.0.0.1')) {
+          wsUrl = wsUrl.replace('ws://', 'wss://');
+        }
+      }
+      
+      // Replace http/https with ws/wss if mistakenly provided
+      if (wsUrl.startsWith('http://')) wsUrl = wsUrl.replace('http://', 'ws://');
+      if (wsUrl.startsWith('https://')) wsUrl = wsUrl.replace('https://', 'wss://');
+
+      console.log('Connecting to WebSocket:', wsUrl);
       wsRef.current = new WebSocket(wsUrl);
       
       wsRef.current.onopen = () => {
