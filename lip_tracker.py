@@ -1,8 +1,8 @@
 import cv2
 import mediapipe as mp
-from mediapipe.python.solutions import face_mesh as mp_face_mesh_module
-from mediapipe.python.solutions import hands as mp_hands_module
-from mediapipe.python.solutions import drawing_utils as mp_drawing_module
+mp_face_mesh_module = mp.solutions.face_mesh
+mp_hands_module = mp.solutions.hands
+mp_drawing_module = mp.solutions.drawing_utils
 import numpy as np
 
 class LipTracker:
