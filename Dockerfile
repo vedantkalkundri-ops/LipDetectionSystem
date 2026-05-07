@@ -1,8 +1,13 @@
 FROM python:3.10-slim
 
-# Install minimal system dependencies required by opencv-python-headless
+# Install system dependencies required by MediaPipe's OpenCV dependency
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
+    libxcb1 \
+    libgl1 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
