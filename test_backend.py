@@ -12,8 +12,8 @@ def test():
     
     try:
         lip_data = tracker.process_frame(frame)
-        gesture, text = model.predict(lip_data)
-        print("Success! Gesture:", gesture, "Text:", text)
+        prediction = model.predict(lip_data, language="en")
+        print("Success! Gesture:", prediction["gesture"], "Text:", prediction["predicted_text"])
     except Exception as e:
         import traceback
         traceback.print_exc()

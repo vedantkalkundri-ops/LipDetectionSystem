@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import base64
+import json
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from lip_tracker import LipTracker
@@ -19,13 +20,31 @@ app.add_middleware(
 tracker = LipTracker()
 model = SpeechModel()
 
+
+@app.get("/api/languages")
+def list_languages():
+    return {
+        "languages": [
+            {"code": "en", "label": "English"},
+            {"code": "hi", "label": "Hindi"},
+            {"code": "es", "label": "Spanish"},
+        ]
+    }
+
 @app.websocket("/ws/stream")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            # Receive base64 frame from frontend
-            data = await websocket.receive_text()
+            raw = await websocket.receive_text()
+            language = "en"
+            data = raw
+
+            # Supports either plain base64 string or JSON message
+            if raw.startswith("{"):
+                parsed = json.loads(raw)
+                data = parsed.get("frame", "")
+                language = parsed.get("language", "en")
             
             # Remove header if present (e.g. data:image/jpeg;base64,...)
             if "," in data:
@@ -43,14 +62,22 @@ async def websocket_endpoint(websocket: WebSocket):
             lip_data = tracker.process_frame(frame)
             
             # Predict gesture and text
-            gesture, predicted_text = model.predict(lip_data)
+            prediction = model.predict(lip_data, language=language, frame=frame)
             
             # Send results back
             response = {
-                "gesture": gesture,
-                "predicted_text": predicted_text,
+                "gesture": prediction["gesture"],
+                "hand_gesture": lip_data.get("hand_gesture", "None"),
+                "facial_gesture": lip_data.get("facial_gesture", "Neutral"),
+                "predicted_text": prediction["predicted_text"],
+                "partial_text": prediction["partial_text"],
+                "confidence": prediction["confidence"],
+                "phrase_id": prediction["phrase_id"],
+                "is_final": prediction["is_final"],
+                "new_word": prediction["new_word"],
                 "landmarks": lip_data["landmarks"],
-                "mar": lip_data["mar"]
+                "mar": lip_data["mar"],
+                "spread": lip_data["spread"],
             }
             
             await websocket.send_json(response)

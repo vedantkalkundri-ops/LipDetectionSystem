@@ -16,14 +16,19 @@ __pycache__/
 *.h5
 *.keras
 *.ckpt
+*.pth
+*.pt
 
 # Archives
 *.zip
 *.rar
 *.7z
 
-# Frontend deps
+# Frontend deps & build output
 node_modules/
+dist/
+build/
+.env
 
 # Dataset / generated data
 dataset/
