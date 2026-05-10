@@ -27,7 +27,6 @@ def list_languages():
         "languages": [
             {"code": "en", "label": "English"},
             {"code": "hi", "label": "Hindi"},
-            {"code": "es", "label": "Spanish"},
         ]
     }
 

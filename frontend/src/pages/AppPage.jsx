@@ -38,7 +38,7 @@ export default function AppPage() {
   const [cameraDevices, setCameraDevices] = useState([]);
   const [selectedCameraId, setSelectedCameraId] = useState('');
   const [cameraStatus, setCameraStatus] = useState('No camera selected');
-
+  
   // Gestures & Voice
   const [handGesture, setHandGesture] = useState("None");
   const [facialGesture, setFacialGesture] = useState("Neutral");
@@ -46,7 +46,7 @@ export default function AppPage() {
   const isMutedRef = useRef(false);
   const [isTranscriptPaused, setIsTranscriptPaused] = useState(false);
   const lastSpokenHandRef = useRef("");
-
+  
   const toggleMute = () => {
     const newState = !isMuted;
     setIsMuted(newState);
@@ -62,7 +62,7 @@ export default function AppPage() {
     if (!canvas || !video) return;
 
     const ctx = canvas.getContext('2d');
-
+    
     if (canvas.width !== video.videoWidth) {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
@@ -75,7 +75,7 @@ export default function AppPage() {
       // CSS scaleX(-1) mirrors the canvas, so we use actual coordinates here!
       const x = pt.x * canvas.width;
       const y = pt.y * canvas.height;
-
+      
       ctx.beginPath();
       ctx.arc(x, y, 2, 0, 2 * Math.PI);
       ctx.fill();
@@ -84,28 +84,14 @@ export default function AppPage() {
 
   useEffect(() => {
     const connectWs = () => {
-      let wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/stream';
-
-      // Auto-upgrade to wss if frontend is on https and wsUrl is insecure
-      if (window.location.protocol === 'https:' && wsUrl.startsWith('ws://')) {
-        // Only upgrade if it's not localhost (to allow local dev on https)
-        if (!wsUrl.includes('localhost') && !wsUrl.includes('127.0.0.1')) {
-          wsUrl = wsUrl.replace('ws://', 'wss://');
-        }
-      }
-
-      // Replace http/https with ws/wss if mistakenly provided
-      if (wsUrl.startsWith('http://')) wsUrl = wsUrl.replace('http://', 'ws://');
-      if (wsUrl.startsWith('https://')) wsUrl = wsUrl.replace('https://', 'wss://');
-
-      console.log('Connecting to WebSocket:', wsUrl);
+      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/stream';
       wsRef.current = new WebSocket(wsUrl);
-
+      
       wsRef.current.onopen = () => {
         console.log('WebSocket Connected');
         setIsConnected(true);
       };
-
+      
       wsRef.current.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.predicted_text) {
@@ -118,18 +104,18 @@ export default function AppPage() {
           const u = new SpeechSynthesisUtterance(data.new_word);
           window.speechSynthesis.speak(u);
         }
-
+        
         setHandGesture(data.hand_gesture || "None");
         setFacialGesture(data.facial_gesture || "Neutral");
         setMar(data.mar || 0);
         setSpread(data.spread || 0);
         setConfidence(data.confidence || 0);
-
+        
         if (data.landmarks && canvasRef.current && videoRef.current) {
           drawLandmarks(data.landmarks);
         }
       };
-
+      
       wsRef.current.onclose = () => {
         console.log('WebSocket Disconnected');
         setIsConnected(false);
@@ -138,7 +124,7 @@ export default function AppPage() {
     };
 
     connectWs();
-
+    
     return () => {
       if (wsRef.current) {
         wsRef.current.close();
@@ -191,7 +177,7 @@ export default function AppPage() {
         else if (handGesture === 'Thumb_Down') textToSpeak = "No";
         else if (handGesture === 'Open_Palm') textToSpeak = "Stop";
         else if (handGesture === 'Victory') textToSpeak = "Thank you";
-
+        
         if (textToSpeak) {
           const u = new SpeechSynthesisUtterance(textToSpeak);
           window.speechSynthesis.speak(u);
@@ -205,19 +191,19 @@ export default function AppPage() {
 
   useEffect(() => {
     let intervalId;
-
+    
     if (isStreaming && isConnected && !isTranscriptPaused) {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-
+      
       intervalId = setInterval(() => {
         if (videoRef.current && videoRef.current.readyState === 4) {
           canvas.width = videoRef.current.videoWidth;
           canvas.height = videoRef.current.videoHeight;
           ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-
+          
           const base64Data = canvas.toDataURL('image/jpeg', 0.5);
-
+          
           if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify({
               frame: base64Data,
@@ -227,7 +213,7 @@ export default function AppPage() {
         }
       }, 100);
     }
-
+    
     return () => clearInterval(intervalId);
   }, [isStreaming, isConnected, language, isTranscriptPaused]);
 
@@ -236,7 +222,7 @@ export default function AppPage() {
       if (!selectedCameraId) {
         await refreshCameraDevices();
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({ 
         video: selectedCameraId ? { deviceId: { exact: selectedCameraId } } : true,
       });
       if (videoRef.current) {
@@ -258,7 +244,7 @@ export default function AppPage() {
       videoRef.current.srcObject = null;
       setIsStreaming(false);
       setCameraStatus('Camera stopped');
-
+      
       if (canvasRef.current) {
         const ctx = canvasRef.current.getContext('2d');
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -295,7 +281,7 @@ export default function AppPage() {
         </div>
       </header>
 
-      <motion.main
+      <motion.main 
         className="main-content"
         variants={containerVariants}
         initial="hidden"
@@ -306,7 +292,7 @@ export default function AppPage() {
             <CameraIcon size={20} className="section-icon" />
             <h2>Camera Feed</h2>
           </div>
-
+          
           <div className="camera-picker-row">
             <div style={{ flex: 1 }}>
               <select
@@ -330,30 +316,30 @@ export default function AppPage() {
           <div className="camera-status">{cameraStatus}</div>
           <div className="video-container">
             <div className="video-wrapper">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
                 muted
               />
               <canvas ref={canvasRef} style={{ pointerEvents: 'none', zIndex: 10 }} />
             </div>
-
+            
             <div className="overlay-controls">
               {!isStreaming ? (
-                <motion.button
+                <motion.button 
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="btn primary"
+                  className="btn primary" 
                   onClick={startCamera}
                 >
                   Start Tracking
                 </motion.button>
               ) : (
-                <motion.button
+                <motion.button 
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="btn danger"
+                  className="btn danger" 
                   onClick={stopCamera}
                 >
                   Stop Camera
@@ -370,8 +356,8 @@ export default function AppPage() {
                 <Activity size={20} className="section-icon" />
                 <h2 className="card-title">Live Transcript</h2>
               </div>
-              <button
-                onClick={() => setIsTranscriptPaused(!isTranscriptPaused)}
+              <button 
+                onClick={() => setIsTranscriptPaused(!isTranscriptPaused)} 
                 className={`btn compact ${isTranscriptPaused ? 'primary' : 'outline'}`}
                 style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}
               >
@@ -383,10 +369,10 @@ export default function AppPage() {
             </div>
             <div className="history-list">
               {history.map((item, idx) => (
-                <motion.div
+                <motion.div 
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="history-item"
+                  className="history-item" 
                   key={`${item}-${idx}`}
                 >
                   {item}
@@ -401,8 +387,8 @@ export default function AppPage() {
                 <Hand size={20} className="section-icon" />
                 <h2 className="card-title">AI Gestures & Voice</h2>
               </div>
-              <button
-                onClick={toggleMute}
+              <button 
+                onClick={toggleMute} 
                 className="btn outline compact"
                 style={{ border: 'none', padding: '5px' }}
                 title={isMuted ? "Unmute Voice Assistant" : "Mute Voice Assistant"}
@@ -410,9 +396,9 @@ export default function AppPage() {
                 {isMuted ? <VolumeX size={20} color="#ef4444" /> : <Volume2 size={20} color="#10b981" />}
               </button>
             </div>
-
+            
             <div className="gesture-status">
-              Hand: <strong>{handGesture.replace("_", " ")}</strong> <br />
+              Hand: <strong>{handGesture.replace("_", " ")}</strong> <br/>
               Face: <strong>{facialGesture}</strong>
             </div>
           </motion.div>

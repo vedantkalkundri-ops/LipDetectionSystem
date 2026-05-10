@@ -12,46 +12,20 @@ ACTIONS = np.array([
     'Sorry',
     'Help',
     'Stop',
-    'Wait',
-    'Come',
-    'Go',
-    'Open',
-    'Close',
-    'Eat',
-    'Drink',
-    'Water',
-    'Need',
-    'Want',
-    'Give',
-    'Take',
-    'Where',
-    'What',
-    'Who',
-    'Why',
-    'When',
-    'How',
-    'You',
-    'Me',
-    'I',
-    'Fine',
+    'World',
     'Good',
-    'Bad',
-    'Okay',
-    'Name',
-    'Home',
-    'Work',
-    'Sleep',
-    'Call',
-    'World'
+    'Morning',
+    'Night',
+    'Eveining'
 ])
 
 # Number of sequences (videos) per action
 # Higher number = better accuracy, but takes longer to collect data
-NO_SEQUENCES = 10 
+NO_SEQUENCES = 30 
 
 # Number of frames per sequence
 # 60 frames = ~2 seconds of recording (good for small sentences)
-SEQUENCE_LENGTH = 60 
+SEQUENCE_LENGTH = 30 
 
 # The number of input features (40 lip landmarks * 2 coordinates)
 INPUT_SIZE = 80

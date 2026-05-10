@@ -39,12 +39,22 @@ def main():
                 pass
 
     print("Opening Camera...")
-    cam_idx_str = input("Enter camera index (0 for default laptop cam, 1 or 2 for DroidCam/Iriun mobile cam) [0]: ")
-    cam_idx = int(cam_idx_str) if cam_idx_str.strip().isdigit() else 0
-    cap = cv2.VideoCapture(cam_idx)
+    print("Options:")
+    print("  - Enter '0' for default laptop camera")
+    print("  - Enter '1' or '2' for USB/Virtual Webcams")
+    print("  - Enter an IP Camera URL (e.g. http://192.168.1.10:4747/video) for DroidCam/IP Webcam")
+    cam_input = input("Enter camera index or URL: ").strip()
+    
+    if cam_input.startswith("http"):
+        # IP Camera stream
+        cap = cv2.VideoCapture(cam_input)
+    else:
+        # Local or Virtual Camera
+        cam_idx = int(cam_input) if cam_input.isdigit() else 0
+        cap = cv2.VideoCapture(cam_idx, cv2.CAP_DSHOW)
     
     if not cap.isOpened():
-        print(f"Error: Could not open camera {cam_idx}. Try a different index.")
+        print(f"Error: Could not open camera '{cam_input}'. Please check the URL or index.")
         return
     
     with mp_face_mesh.FaceMesh(max_num_faces=1, refine_landmarks=True) as face_mesh:
