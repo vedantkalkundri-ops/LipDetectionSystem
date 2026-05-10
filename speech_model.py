@@ -1,17 +1,14 @@
 import time
 import os
+import json
 import numpy as np
+import cv2
 
-# Try to import torch and the model, but fall back gracefully
 try:
-    import torch
-    import sys
-    sys.path.append(os.path.join(os.path.dirname(__file__), 'model_dev'))
-    from config import INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES, ACTIONS, SEQUENCE_LENGTH
-    from train import LipLSTM
-    TORCH_AVAILABLE = True
+    import onnxruntime as ort
+    ONNX_AVAILABLE = True
 except ImportError:
-    TORCH_AVAILABLE = False
+    ONNX_AVAILABLE = False
 
 class SpeechModel:
     def __init__(self):
@@ -28,21 +25,30 @@ class SpeechModel:
         # Deep Learning state
         self.use_dl = False
         self.sequence = []
+        self.is_recording = False
+        self.sequence_len = 20
+        self.phrase_dict = {}
         
-        if TORCH_AVAILABLE:
-            model_path = os.path.join(os.path.dirname(__file__), 'model_dev', 'lip_model.pth')
-            if os.path.exists(model_path):
+        if ONNX_AVAILABLE:
+            model_path = os.path.join(os.path.dirname(__file__), 'models', 'lip_phrase_baseline.onnx')
+            config_path = os.path.join(os.path.dirname(__file__), 'config', 'phrases_50.json')
+            
+            if os.path.exists(model_path) and os.path.exists(config_path):
                 try:
-                    self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-                    self.model = LipLSTM(INPUT_SIZE, HIDDEN_SIZE, NUM_CLASSES).to(self.device)
-                    self.model.load_state_dict(torch.load(model_path, map_location=self.device))
-                    self.model.eval()
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config_data = json.load(f)
+                        for phrase in config_data['phrases']:
+                            self.phrase_dict[int(phrase['id'])] = phrase['display']
+                            
+                    self.ort_session = ort.InferenceSession(model_path)
                     self.use_dl = True
-                    print("Successfully loaded Deep Learning Lip Reading Model!")
+                    print("Successfully loaded Deep Learning Lip Reading Model (ONNX)!")
                 except Exception as e:
-                    print(f"Error loading model: {e}")
+                    print(f"Error loading ONNX model: {e}")
             else:
-                print("lip_model.pth not found. Using heuristic model.")
+                print("ONNX model or config not found. Using heuristic model.")
+        else:
+            print("ONNXRuntime is not installed. Using heuristic model.")
 
     def predict(self, lip_data, language="en", frame=None):
         """
@@ -61,8 +67,8 @@ class SpeechModel:
             }
             
         new_word = ""
-        if self.use_dl:
-            _, display_text, confidence, new_word = self._predict_dl(lip_data)
+        if self.use_dl and frame is not None:
+            _, display_text, confidence, new_word = self._predict_dl(lip_data, frame)
         else:
             _, display_text, confidence = self._predict_heuristic(lip_data)
             
@@ -76,85 +82,94 @@ class SpeechModel:
             "new_word": new_word
         }
             
-    def _predict_dl(self, lip_data):
+    def _predict_dl(self, lip_data, frame):
         current_time = time.time()
         
         # Track MAR variance for silence detection
         self.mar_sequence.append(lip_data["mar"])
-        self.mar_sequence = self.mar_sequence[-SEQUENCE_LENGTH:]
-        
-        # Extract features directly from landmarks (40 points * 2)
-        lip_points = []
-        for pt in lip_data["landmarks"]:
-            lip_points.extend([pt["x"], pt["y"]])
+        if len(self.mar_sequence) > 10:
+            self.mar_sequence.pop(0)
             
-        # Normalize the incoming frame just like during training
-        xs = lip_points[0::2]
-        ys = lip_points[1::2]
-        mean_x = np.mean(xs)
-        mean_y = np.mean(ys)
-        
-        normalized_points = []
         mar = lip_data["mar"]
+        hand_gesture = lip_data.get("hand_gesture", "None")
         display_text = self.current_sentence
         new_word = ""
+        
+        # Extract ROI
+        roi = None
+        if lip_data.get("lip_bbox") is not None:
+            x1, y1, x2, y2 = lip_data["lip_bbox"]
+            roi_bgr = frame[y1:y2+1, x1:x2+1]
+            if roi_bgr.size > 0:
+                roi_gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
+                roi = cv2.resize(roi_gray, (64, 64), interpolation=cv2.INTER_AREA)
 
-        # Extract landmarks
-        landmarks = lip_data["landmarks"]
-        xs = [pt['x'] for pt in landmarks]
-        ys = [pt['y'] for pt in landmarks]
-        
-        mean_x, mean_y = np.mean(xs), np.mean(ys)
-        norm_x = [x - mean_x for x in xs]
-        norm_y = [y - mean_y for y in ys]
-        
-        max_val = max(np.max(np.abs(norm_x)), np.max(np.abs(norm_y)), 1e-5)
-        norm_x = [x / max_val for x in norm_x]
-        norm_y = [y / max_val for y in norm_y]
-        
-        normalized_points = []
-        for nx, ny in zip(norm_x, norm_y):
-            normalized_points.extend([nx, ny])
-            
         # Clear sentence after 4s of silence
-        if not getattr(self, 'is_recording', False) and current_time - self.last_prediction_time > 4.0:
+        if not self.is_recording and current_time - self.last_prediction_time > 4.0:
             self.current_sentence = ""
             display_text = ""
 
-        # Trigger-based Speech Activity Detection
-        if not getattr(self, 'is_recording', False):
-            if mar > 0.12: # Mouth opened significantly, start recording a word!
+        mar_variance = np.std(self.mar_sequence) if len(self.mar_sequence) == 10 else 0.0
+
+        # Robust SAD: trigger only if mouth is moving (variance), mouth is reasonably open, and NO hand gesture
+        if not self.is_recording:
+            if mar_variance > 0.015 and mar > 0.10 and hand_gesture == "None":
                 self.is_recording = True
-                self.sequence = [normalized_points]
+                if roi is not None:
+                    self.sequence = [roi]
         else:
-            self.sequence.append(normalized_points)
-            display_text = self.current_sentence # Do not show 'Listening...', keep the sentence
-            
-            if len(self.sequence) == SEQUENCE_LENGTH:
-                # We captured exactly 60 frames of a word! Predict it.
-                with torch.no_grad():
-                    input_tensor = torch.tensor([self.sequence], dtype=torch.float32).to(self.device)
-                    res = self.model(input_tensor)
-                    confidence, predicted_idx = torch.max(res, 1)
-                    
-                    predicted_word = ACTIONS[predicted_idx.item()]
-                    conf_val = float(confidence[0].item())
-                    
-                    # Only accept high confidence predictions to stop hallucinations
-                    if conf_val > 0.6: 
-                        new_word = predicted_word
-                        if self.current_sentence == "":
-                            self.current_sentence = predicted_word
-                        else:
-                            if predicted_word != self.last_predicted_word:
-                                self.current_sentence += " " + predicted_word
-                            else:
-                                self.current_sentence += " " + predicted_word
-                            
-                        self.last_predicted_word = predicted_word
-                        self.last_prediction_time = current_time
+            # If a hand gesture is detected during recording, we abort lip reading to avoid false positives
+            if hand_gesture != "None":
+                self.is_recording = False
+                self.sequence = []
+            elif roi is not None:
+                self.sequence.append(roi)
+                display_text = self.current_sentence
+                
+                if len(self.sequence) == self.sequence_len:
+                    # We captured exactly sequence_len frames of a word! Predict it.
+                    try:
+                        # Prepare input tensor: [T, 64, 64]
+                        seq_arr = np.stack(self.sequence, axis=0)
                         
-                    display_text = self.current_sentence
+                        # Normalize each clip identically to training
+                        seq_arr = seq_arr.astype(np.float32) / 255.0
+                        mean = seq_arr.mean()
+                        std = seq_arr.std() + 1e-6
+                        seq_arr = (seq_arr - mean) / std
+                            
+                        # Reshape to [B, T, 1, H, W] -> [1, 20, 1, 64, 64]
+                        input_tensor = seq_arr.reshape(1, self.sequence_len, 1, 64, 64).astype(np.float32)
+                        
+                        ort_inputs = {self.ort_session.get_inputs()[0].name: input_tensor}
+                        ort_outs = self.ort_session.run(None, ort_inputs)
+                        logits = ort_outs[0][0]
+                        
+                        # Softmax
+                        exp_logits = np.exp(logits - np.max(logits))
+                        probs = exp_logits / np.sum(exp_logits)
+                        predicted_idx = np.argmax(probs)
+                        conf_val = probs[predicted_idx]
+                        
+                        # High confidence threshold to filter out random noise/head movements
+                        if conf_val > 0.4:
+                            predicted_word = self.phrase_dict.get(predicted_idx, "")
+                            new_word = predicted_word
+                            if self.current_sentence == "":
+                                self.current_sentence = predicted_word
+                            else:
+                                if predicted_word != self.last_predicted_word:
+                                    self.current_sentence += " " + predicted_word
+                                else:
+                                    self.current_sentence += " " + predicted_word
+                                
+                            self.last_predicted_word = predicted_word
+                            self.last_prediction_time = current_time
+                            
+                        display_text = self.current_sentence
+                    except Exception as e:
+                        print(f"Inference error: {e}")
+                        
                     self.is_recording = False
                     self.sequence = []
                     
@@ -163,6 +178,7 @@ class SpeechModel:
     def _predict_heuristic(self, lip_data):
         mar = lip_data["mar"]
         width = lip_data["width"]
+        hand_gesture = lip_data.get("hand_gesture", "None")
         
         current_time = time.time()
         
@@ -177,15 +193,16 @@ class SpeechModel:
         else:
             gesture = "Mouth Closed"
             
-        # Detect state transitions (Syllable tracking)
-        if mar > 0.15 and not self.is_open:
-            self.is_open = True
-            
-        elif mar <= 0.10 and self.is_open:
-            # Transitioned from Open -> Closed (One syllable)
-            self.is_open = False
-            self.syllable_count += 1
-            self.last_syllable_time = current_time
+        # Block syllable tracking if hand gesture is active
+        if hand_gesture == "None":
+            if mar > 0.15 and not self.is_open:
+                self.is_open = True
+                
+            elif mar <= 0.10 and self.is_open:
+                # Transitioned from Open -> Closed (One syllable)
+                self.is_open = False
+                self.syllable_count += 1
+                self.last_syllable_time = current_time
             
         predicted_text = ""
         

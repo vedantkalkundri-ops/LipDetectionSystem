@@ -33,6 +33,6 @@ build/
 # Dataset / generated data
 dataset/
 models/
-
+data/
 # OS junk
 .DS_Store

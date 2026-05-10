@@ -117,12 +117,25 @@ class LipTracker:
                 lip_data["openness_velocity"] = mar - self.last_mar
                 self.last_mar = mar
 
-                # Extract all unique lip landmarks
+                # Extract all unique lip landmarks and calculate bounding box
                 lip_indices = list(set([idx for tup in self.mp_face_mesh.FACEMESH_LIPS for idx in tup]))
                 lip_indices.sort()
+                
+                xs, ys = [], []
                 for idx in lip_indices:
                     pt = face_landmarks.landmark[idx]
                     lip_data["landmarks"].append({"x": pt.x, "y": pt.y})
+                    xs.append(int(pt.x * w))
+                    ys.append(int(pt.y * h))
+                
+                if xs and ys:
+                    pad_x = max(8, int(0.15 * (max(xs) - min(xs) + 1)))
+                    pad_y = max(8, int(0.30 * (max(ys) - min(ys) + 1)))
+                    x1 = max(0, min(xs) - pad_x)
+                    y1 = max(0, min(ys) - pad_y)
+                    x2 = min(w - 1, max(xs) + pad_x)
+                    y2 = min(h - 1, max(ys) + pad_y)
+                    lip_data["lip_bbox"] = (x1, y1, x2, y2)
                     
                 # Facial Gestures Heuristics
                 if mar > 0.15:
